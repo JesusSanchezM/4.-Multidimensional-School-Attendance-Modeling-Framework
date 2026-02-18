@@ -1,0 +1,16 @@
+# Ignorar datasets
+*.csv
+*.db
+
+# Entornos virtuales
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Mac
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
