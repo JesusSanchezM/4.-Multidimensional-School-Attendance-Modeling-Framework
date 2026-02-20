@@ -10,7 +10,6 @@ YEARS = [2018, 2024]
 
 MODULES = [
     "viviendas",
-    "hogares",
     "concentradohogar",
     "gastospersona",
     "poblacion",

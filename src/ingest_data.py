@@ -15,25 +15,28 @@ def get_db_connection():
 
 def clean_and_prepare(df, year):
     """Limpieza básica común para todos los DataFrames"""
+    df = df.copy()
+    
     # 1. Normalizar a minúsculas
     df.columns = df.columns.str.lower().str.strip()
     
     # 2. Agregar año
     df['anio'] = year
     
-    # 3. Formatear folioviv como texto (clave)
+    # 3. Formatear llaves quitando posibles decimales (.0) creados por Pandas
     if 'folioviv' in df.columns:
-        df['folioviv'] = df['folioviv'].astype(str).str.zfill(10)
+        df['folioviv'] = df['folioviv'].astype(str).str.split('.').str[0].str.zfill(10)
     
-    # 4. Formatear foliohog y numren como texto (clave)
     if 'foliohog' in df.columns:
-        df['foliohog'] = df['foliohog'].astype(str) # A veces es '1', a veces '01'
+        df['foliohog'] = df['foliohog'].astype(str).str.split('.').str[0]
+        
     if 'numren' in df.columns:
-        df['numren'] = df['numren'].astype(str).str.zfill(2)
+        df['numren'] = df['numren'].astype(str).str.split('.').str[0].str.zfill(2)
 
-    # 5. Generar entidad desde ubica_geo si existe
+    # 4. Generar entidad desde ubica_geo si existe
     if 'ubica_geo' in df.columns and 'entidad' not in df.columns:
-        df['ubica_geo'] = df['ubica_geo'].astype(str).str.zfill(5)
+        # Asegurarnos de que no tenga el .0 fantasma tampoco
+        df['ubica_geo'] = df['ubica_geo'].astype(str).str.split('.').str[0].str.zfill(5)
         df['entidad'] = df['ubica_geo'].str[:2]
         
     return df
@@ -76,8 +79,10 @@ def process_table(year, csv_prefix, table_name):
             
         print(f"\n     ✅ {table_name}: {rows_inserted} registros completados.")
             
+    except sqlite3.IntegrityError as e:
+        print(f"\n     ❌ Error de Integridad en {table_name}: {e}")
     except Exception as e:
-        print(f"\n     ❌ Error cargando {table_name}: {e}")
+        print(f"\n     ❌ Error cargando {table_name}: Tipo: {type(e).__name__}, Detalle: {e}")
     finally:
         conn.close()
 
@@ -89,7 +94,7 @@ def main():
     # El orden importa: Primero padres (Viviendas), luego hijos (Hogares), luego nietos (Poblacion)
     tasks = {
         "viviendas": "viviendas",
-        "hogares": "hogares",
+        "concentradohogar": "hogares",
         "poblacion": "poblacion",
         "ingresos": "ingresos",
         "gastospersona": "gastos_persona",
