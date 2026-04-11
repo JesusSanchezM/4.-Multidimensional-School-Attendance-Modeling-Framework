@@ -1,16 +1,74 @@
-# Ignorar datasets
+# =========================
+# DATASETS
+# =========================
+
+data/raw/
+data/processed/
+
 *.csv
+*.tsv
+*.xlsx
+*.json
+*.parquet
+*.feather
 *.db
+*.sqlite
 
-# Entornos virtuales
-venv/
+*.zip
+*.gz
+*.tar
+*.7z
 
-# Python cache
+# =========================
+# MODELS / RESULTS
+# =========================
+
+models/
+results/
+outputs/
+logs/
+
+*.pkl
+*.joblib
+*.h5
+*.model
+
+# =========================
+# PYTHON
+# =========================
+
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Mac
-.DS_Store
+# Virtual environments
+venv/
+.env/
+.venv/
 
-# Jupyter
+# =========================
+# JUPYTER
+# =========================
+
 .ipynb_checkpoints/
+
+# =========================
+# OS
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+# GIT
+# =========================
+
+*.log

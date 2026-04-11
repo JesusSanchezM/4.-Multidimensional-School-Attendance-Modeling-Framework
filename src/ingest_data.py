@@ -1,12 +1,14 @@
 import sqlite3
 import pandas as pd
 import sys
+import glob # Necesario para buscar el archivo del censo
 from pathlib import Path
 
 # --- CONFIGURACIÓN ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "processed" / "enigh_unificada.db"
 RAW_PATH = BASE_DIR / "data" / "raw"
+CENSO_PATH = RAW_PATH / "censo_2020" # Ruta específica del Censo
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -14,16 +16,12 @@ def get_db_connection():
     return conn
 
 def clean_and_prepare(df, year):
-    """Limpieza básica común para todos los DataFrames"""
+    """Limpieza básica común para todos los DataFrames de la ENIGH"""
     df = df.copy()
     
-    # 1. Normalizar a minúsculas
     df.columns = df.columns.str.lower().str.strip()
-    
-    # 2. Agregar año
     df['anio'] = year
     
-    # 3. Formatear llaves quitando posibles decimales (.0) creados por Pandas
     if 'folioviv' in df.columns:
         df['folioviv'] = df['folioviv'].astype(str).str.split('.').str[0].str.zfill(10)
     
@@ -33,19 +31,14 @@ def clean_and_prepare(df, year):
     if 'numren' in df.columns:
         df['numren'] = df['numren'].astype(str).str.split('.').str[0].str.zfill(2)
 
-    # 4. Generar entidad desde ubica_geo si existe
     if 'ubica_geo' in df.columns and 'entidad' not in df.columns:
-        # Asegurarnos de que no tenga el .0 fantasma tampoco
         df['ubica_geo'] = df['ubica_geo'].astype(str).str.split('.').str[0].str.zfill(5)
         df['entidad'] = df['ubica_geo'].str[:2]
         
     return df
 
 def process_table(year, csv_prefix, table_name):
-    """
-    Función Genérica Maestra:
-    Busca el archivo {csv_prefix}_{year}.csv y lo carga en la tabla SQL {table_name}.
-    """
+    """Procesa los archivos estándar de la ENIGH (2018 y 2024)"""
     csv_name = f"{csv_prefix}_{year}.csv"
     csv_path = RAW_PATH / csv_name
     
@@ -56,9 +49,6 @@ def process_table(year, csv_prefix, table_name):
     print(f"   ↳ 📥 Cargando {csv_name} en tabla '{table_name}'...")
     
     conn = get_db_connection()
-    
-    # Obtenemos las columnas que REALMENTE existen en la tabla SQL
-    # Esto evita errores si el CSV trae columnas basura
     cursor = conn.execute(f"PRAGMA table_info({table_name})")
     valid_sql_cols = [row[1] for row in cursor.fetchall()]
     
@@ -66,11 +56,8 @@ def process_table(year, csv_prefix, table_name):
     rows_inserted = 0
     
     try:
-        # Leemos en chunks para no saturar memoria RAM
         for chunk in pd.read_csv(csv_path, chunksize=chunk_size, low_memory=False):
             chunk = clean_and_prepare(chunk, year)
-            
-            # Filtramos: Solo insertamos las columnas que existen en el Schema SQL
             cols_to_insert = [c for c in valid_sql_cols if c in chunk.columns]
             
             chunk[cols_to_insert].to_sql(table_name, conn, if_exists='append', index=False)
@@ -86,12 +73,58 @@ def process_table(year, csv_prefix, table_name):
     finally:
         conn.close()
 
+def process_censo():
+    """Busca y procesa dinámicamente el archivo del Censo 2020"""
+    print(f"\n📅 --- PROCESANDO CENSO 2020 ---")
+    table_name = "censo_2020"
+    
+    # Busca cualquier CSV en la carpeta del Censo (ignorando mayúsculas/minúsculas)
+    csv_files = glob.glob(str(CENSO_PATH / "**" / "*.[cC][sS][vV]"), recursive=True)
+    
+    if not csv_files:
+        print("⚠️ No se encontró el archivo del Censo 2020 en la carpeta aislada.")
+        return
+        
+    # Toma el archivo más pesado (por si hay manuales o metadatos)
+    csv_path = max(csv_files, key=lambda x: Path(x).stat().st_size)
+    print(f"   ↳ 📥 Cargando {Path(csv_path).name} en tabla '{table_name}'...")
+    
+    conn = get_db_connection()
+    cursor = conn.execute(f"PRAGMA table_info({table_name})")
+    valid_sql_cols = [row[1] for row in cursor.fetchall()]
+    
+    chunk_size = 50000
+    rows_inserted = 0
+    
+    try:
+        for chunk in pd.read_csv(csv_path, chunksize=chunk_size, low_memory=False):
+            # Limpieza básica para el Censo
+            chunk.columns = chunk.columns.str.lower().str.strip()
+            
+            if 'id_viv' in chunk.columns:
+                chunk['id_viv'] = chunk['id_viv'].astype(str).str.split('.').str[0]
+            if 'id_persona' in chunk.columns:
+                chunk['id_persona'] = chunk['id_persona'].astype(str).str.split('.').str[0]
+            if 'ent' in chunk.columns:
+                chunk['ent'] = chunk['ent'].astype(str).str.split('.').str[0].str.zfill(2)
+                
+            cols_to_insert = [c for c in valid_sql_cols if c in chunk.columns]
+            
+            chunk[cols_to_insert].to_sql(table_name, conn, if_exists='append', index=False)
+            rows_inserted += len(chunk)
+            print(f"     ... {rows_inserted} filas procesadas.", end='\r')
+            
+        print(f"\n     ✅ {table_name}: {rows_inserted} registros completados.")
+    except Exception as e:
+        print(f"\n     ❌ Error cargando {table_name}: {e}")
+    finally:
+        conn.close()
+
 def main():
     print("🚀 Iniciando carga de datos RELACIONAL...")
-    years = [2018, 2024]
     
-    # Diccionario: { Prefijo_CSV : Nombre_Tabla_SQL }
-    # El orden importa: Primero padres (Viviendas), luego hijos (Hogares), luego nietos (Poblacion)
+    # 1. Procesar la ENIGH (2018 y 2024)
+    years = [2018, 2024]
     tasks = {
         "viviendas": "viviendas",
         "concentradohogar": "hogares",
@@ -102,9 +135,12 @@ def main():
     }
 
     for year in years:
-        print(f"\n📅 --- PROCESANDO AÑO {year} ---")
+        print(f"\n📅 --- PROCESANDO ENIGH {year} ---")
         for csv_prefix, table_name in tasks.items():
             process_table(year, csv_prefix, table_name)
+            
+    # 2. Procesar el Censo 2020
+    process_censo()
         
     print("\n🏁 Carga finalizada.")
 

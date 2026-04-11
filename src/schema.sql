@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS ingresos;
 DROP TABLE IF EXISTS poblacion;
 DROP TABLE IF EXISTS hogares;
 DROP TABLE IF EXISTS viviendas;
+DROP TABLE IF EXISTS censo_2020;
 
 -- 3. Reactivar llaves foráneas
 PRAGMA foreign_keys = ON;
@@ -107,6 +108,26 @@ CREATE TABLE gastos_hogar (
     gas_nm_tri  REAL,
     FOREIGN KEY (folioviv, foliohog, anio) REFERENCES hogares(folioviv, foliohog, anio)
 );
+
+-- G. TABLA CENSO 2020
+CREATE TABLE censo_2020 (
+    id_viv      TEXT NOT NULL,
+    id_persona  TEXT NOT NULL,
+    ent         TEXT,
+    edad        INTEGER,
+    ingtrmen    REAL,
+    factor      REAL,
+    cobertura   INTEGER,
+    asisten     INTEGER,
+    nivacad     INTEGER,
+    escolari    INTEGER,
+    conact      INTEGER,
+    sittra      INTEGER,
+    PRIMARY KEY (id_viv, id_persona)
+);
+
+-- ÍNDICE PARA VELOCIDAD EN EL CENSO
+CREATE INDEX idx_censo_ent ON censo_2020(ent);
 
 -- ÍNDICES PARA VELOCIDAD
 CREATE INDEX idx_viviendas_ubica ON viviendas(ubica_geo);
